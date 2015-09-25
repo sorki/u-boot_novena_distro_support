@@ -1,0 +1,34 @@
+#!/bin/bash
+
+MEDIA=/dev/mmcblk0
+
+# image exists
+if [ ! -f "SPL" ]; then
+  echo "Error: SPL not found! Build u-boot first"
+  exit 1
+fi
+
+if [ ! -f "u-boot.img" ]; then
+  echo "Error: u-boot.img not found! Build u-boot first"
+  exit 1
+fi
+
+# device exists
+if [ ! -e "$MEDIA" ] ; then
+  echo "Error: $MEDIA not found! Please choose an existing device."
+  exit 1
+fi
+
+
+echo "WARNING: Going to flash u-boot to $MEDIA"
+echo " Type 'YES' to proceed, anything else to exit now "
+read -p "= Proceed? " PROCEED
+if [ "$(echo ${PROCEED} | tr [:lower:] [:upper:])" != "YES" ]; then
+    echo "User exit"
+    exit 0
+fi
+
+echo "= Writing SPL ...."
+sudo dd if=SPL of=$MEDIA seek=1 bs=1k
+echo "= Writing u-boot.img ...."
+sudo dd if=u-boot.img of=$MEDIA bs=1k seek=69 conv=fsync; sync
