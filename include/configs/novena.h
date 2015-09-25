@@ -16,8 +16,6 @@
 #define CONFIG_FIT
 #define CONFIG_KEYBOARD
 
-#include "mx6_common.h"
-
 /* U-Boot Commands */
 #define CONFIG_CMD_ASKENV
 #define CONFIG_CMD_BMODE
@@ -56,9 +54,7 @@
 #endif
 
 /* Booting Linux */
-#define CONFIG_BOOTFILE			"fitImage"
 #define CONFIG_BOOTARGS			"console=ttymxc1,115200 "
-#define CONFIG_BOOTCOMMAND		"run net_nfs"
 #define CONFIG_HOSTNAME			novena
 
 /* Physical Memory Map */
@@ -81,9 +77,11 @@
 #define CONFIG_SYS_MALLOC_LEN		(64 * 1024 * 1024)
 
 /* SPL */
-#define CONFIG_SPL_FAT_SUPPORT
+#define CONFIG_SPL_EXT_SUPPORT
 #define CONFIG_SPL_MMC_SUPPORT
 #include "imx6_spl.h"			/* common IMX6 SPL configuration */
+#include <config_distro_defaults.h>
+#include "mx6_common.h"
 
 /* Ethernet Configuration */
 #ifdef CONFIG_CMD_NET
@@ -186,58 +184,49 @@
 #define CONFIG_IMX_VIDEO_SKIP
 #endif
 
-/* Extra U-Boot environment. */
-#define CONFIG_EXTRA_ENV_SETTINGS					\
-	"fdt_high=0xffffffff\0"						\
-	"initrd_high=0xffffffff\0"					\
-	"consdev=ttymxc1\0"						\
-	"baudrate=115200\0"						\
-	"bootdev=/dev/mmcblk0p1\0"					\
-	"rootdev=/dev/mmcblk0p2\0"					\
-	"netdev=eth0\0"							\
-	"kernel_addr_r=0x18000000\0"					\
-	"addcons="							\
-		"setenv bootargs ${bootargs} "				\
-		"console=${consdev},${baudrate}\0"			\
-	"addip="							\
-		"setenv bootargs ${bootargs} "				\
-		"ip=${ipaddr}:${serverip}:${gatewayip}:"		\
-			"${netmask}:${hostname}:${netdev}:off\0"	\
-	"addmisc="							\
-		"setenv bootargs ${bootargs} ${miscargs}\0"		\
-	"addargs=run addcons addmisc\0"					\
-	"mmcload="							\
-		"mmc rescan ; "						\
-		"ext4load mmc 0:1 ${kernel_addr_r} ${bootfile}\0"	\
-	"netload="							\
-		"tftp ${kernel_addr_r} ${hostname}/${bootfile}\0"	\
-	"miscargs=nohlt panic=1\0"					\
-	"mmcargs=setenv bootargs root=${rootdev} rw rootwait\0"		\
-	"nfsargs="							\
-		"setenv bootargs root=/dev/nfs rw "			\
-			"nfsroot=${serverip}:${rootpath},v3,tcp\0"	\
-	"mmc_mmc="							\
-		"run mmcload mmcargs addargs ; "			\
-		"bootm ${kernel_addr_r}\0"				\
-	"mmc_nfs="							\
-		"run mmcload nfsargs addip addargs ; "			\
-		"bootm ${kernel_addr_r}\0"				\
-	"net_mmc="							\
-		"run netload mmcargs addargs ; "			\
-		"bootm ${kernel_addr_r}\0"				\
-	"net_nfs="							\
-		"run netload nfsargs addip addargs ; "			\
-		"bootm ${kernel_addr_r}\0"				\
-	"update_sd_spl_filename=SPL\0"					\
-	"update_sd_uboot_filename=u-boot.img\0"				\
-	"update_sd_firmware="	/* Update the SD firmware partition */	\
-		"if mmc rescan ; then "					\
-		"if dhcp ${update_sd_spl_filename} ; then "		\
-		"mmc write ${loadaddr} 2 0x200 ; "			\
-		"fi ; "							\
-		"if dhcp ${update_sd_uboot_filename} ; then "		\
-		"fatwrite mmc 0:1 ${loadaddr} u-boot.img ${filesize} ; "\
-		"fi ; "							\
-		"fi\0"							\
+
+/*
+ * Memory layout for where various images get loaded by boot scripts:
+ *
+ * scriptaddr can be pretty much anywhere that doesn't conflict with something
+ *   else. Put it low in memory to avoid conflicts.
+ *
+ * pxefile_addr_r can be pretty much anywhere that doesn't conflict with
+ *   something else. Put it low in memory to avoid conflicts.
+ *
+ * kernel_addr_r must be within the first 128M of RAM in order for the
+ *   kernel's CONFIG_AUTO_ZRELADDR option to work. Since the kernel will
+ *   decompress itself to 0x8000 after the start of RAM, kernel_addr_r
+ *   should not overlap that area, or the kernel will have to copy itself
+ *   somewhere else before decompression. Similarly, the address of any other
+ *   data passed to the kernel shouldn't overlap the start of RAM. Pushing
+ *   this up to 16M allows for a sizable kernel to be decompressed below the
+ *   compressed load address.
+ *
+ * fdt_addr_r simply shouldn't overlap anything else. Choosing 32M allows for
+ *   the compressed kernel to be up to 16M too.
+ *
+ * ramdisk_addr_r simply shouldn't overlap anything else. Choosing 33M allows
+ *   for the FDT/DTB to be up to 1M, which is hopefully plenty.
+ */
+#define ENV_MEM_LAYOUT_SETTINGS \
+	"bootm_size=0x20000000\0" \
+	"scriptaddr=0x0010000000\0" \
+	"pxefile_addr_r=0x00200000\0" \
+	"kernel_addr_r=0x12000000\0" \
+	"fdt_addr_r=0x13000000\0" \
+	"ramdisk_addr_r=0x13100000\0" \
+
+#define BOOT_TARGET_DEVICES(func) \
+	func(MMC, mmc, 0) \
+	func(USB, usb, 0) \
+	func(PXE, pxe, na) \
+	func(DHCP, dhcp, na)
+#include <config_distro_bootcmd.h>
+
+#define CONFIG_EXTRA_ENV_SETTINGS \
+	ENV_MEM_LAYOUT_SETTINGS \
+	"fdtfile=" CONFIG_DEFAULT_DEVICE_TREE ".dtb\0" \
+	BOOTENV
 
 #endif				/* __CONFIG_H */
